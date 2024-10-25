@@ -153,9 +153,9 @@ class VI(nn.Module):
         phi = self.q_c(x) ** 2
         phi = phi.view(self.q_dim, self.K)
         # NOTE: softmax winner takes all
-        # phi = F.softmax(phi, dim=1)
+        phi = F.softmax(phi, dim=1)
 
-        phi = phi / phi.sum(dim=1).view(-1, 1)
+        # phi = phi / phi.sum(dim=1).view(-1, 1)
 
         mu = self.q_mu(x)
         log_var = self.q_log_var(x)
@@ -169,8 +169,9 @@ def loss_elbo(X, mu, log_var, phi, x_recon):
     t1 = -0.5 * (log_var.exp() + mu**2)
     t1 = t1.sum()
 
-    # FIXME: this is not correct, but worth to try
+    # FIXME: this is not correct, but why?
     # t2 = (X - x_recon) ** 2
+    # t2 = t2.view(-1, 1) * phi
     # t2 = -torch.sum(t2)
 
     # NOTE: this is correct
@@ -179,10 +180,12 @@ def loss_elbo(X, mu, log_var, phi, x_recon):
     t2 = phi * t2
     t2 = torch.sum(t2)
 
-    # NOTE:mean or sum has no effect. mean!
-    # t3 = phi * torch.log(phi)
-    # t3 = -torch.sum(t3)
-    t3 = torch.log(phi).mean()
+    # NOTE:Basics
+    t3 = phi * torch.log(phi)
+    t3 = -torch.sum(t3)
+
+    # NOTE: mean or sum has no effect
+    # t3 = torch.log(phi).mean()
 
     t4 = 0.5 * log_var.sum()
     # print(f't1: {t1}, t2: {t2}, t3: {t3}, t4: {t4}')
@@ -222,7 +225,7 @@ print(f"m: {ugmm.m}, Var: {ugmm.s2}")
 mu = None
 log_var = None
 
-epochs = 5000
+epochs = 1000
 m = VI(SAMPLE * num_components, 3)
 optim = torch.optim.Adam(m.parameters(), lr=0.005)
 
@@ -235,7 +238,7 @@ for epoch in range(epochs + 1):
 
     loss = loss_elbo(X1, mu, log_var, phi, x_recon)
 
-    if epoch % 500 == 0:
+    if epoch % 100 == 0:
         print(f"epoch: {epoch}, loss: {loss}")
         print(f"mu: {mu}, log_var: {log_var}")
 
@@ -243,5 +246,7 @@ for epoch in range(epochs + 1):
     # loss.backward()
     optim.step()
 
+print("True distribution")
+print(f"mu: {mu_arr}, std: {np.std(X,axis=0)}")
 print("VI result")
 print(f"mu: {mu}, var: {log_var.exp()}, std: {torch.std(x_recon)}")
